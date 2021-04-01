@@ -43,7 +43,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import io.airbyte.commons.json.Jsons;
 import io.airbyte.commons.resources.MoreResources;
-import io.airbyte.integrations.base.AirbyteMessageConsumer;
+import io.airbyte.integrations.base.DestinationConsumer;
 import io.airbyte.integrations.base.JavaBaseConstants;
 import io.airbyte.integrations.destination.NamingConventionTransformer;
 import io.airbyte.integrations.destination.StandardNameTransformer;
@@ -85,6 +85,7 @@ class BigQueryDestinationTest {
   private static final Instant NOW = Instant.now();
   private static final String USERS_STREAM_NAME = "users";
   private static final String TASKS_STREAM_NAME = "tasks";
+  private static final String STREAM_NAMESPACE = "tests";
   private static final AirbyteMessage MESSAGE_USERS1 = new AirbyteMessage().withType(AirbyteMessage.Type.RECORD)
       .withRecord(new AirbyteRecordMessage().withStream(USERS_STREAM_NAME)
           .withData(Jsons.jsonNode(ImmutableMap.builder().put("name", "john").put("id", "10").build()))
@@ -105,10 +106,13 @@ class BigQueryDestinationTest {
       .withState(new AirbyteStateMessage().withData(Jsons.jsonNode(ImmutableMap.builder().put("checkpoint", "now!").build())));
 
   private static final ConfiguredAirbyteCatalog CATALOG = new ConfiguredAirbyteCatalog().withStreams(Lists.newArrayList(
-      CatalogHelpers.createConfiguredAirbyteStream(USERS_STREAM_NAME, io.airbyte.protocol.models.Field.of("name", JsonSchemaPrimitive.STRING),
-          io.airbyte.protocol.models.Field
-              .of("id", JsonSchemaPrimitive.STRING)),
-      CatalogHelpers.createConfiguredAirbyteStream(TASKS_STREAM_NAME, Field.of("goal", JsonSchemaPrimitive.STRING))));
+      CatalogHelpers.createConfiguredAirbyteStream(
+          CatalogHelpers.createAirbyteStreamName(STREAM_NAMESPACE, USERS_STREAM_NAME),
+          Field.of("name", JsonSchemaPrimitive.STRING),
+          Field.of("id", JsonSchemaPrimitive.STRING)),
+      CatalogHelpers.createConfiguredAirbyteStream(
+          CatalogHelpers.createAirbyteStreamName(STREAM_NAMESPACE, TASKS_STREAM_NAME),
+          Field.of("goal", JsonSchemaPrimitive.STRING))));
 
   private static final NamingConventionTransformer NAMING_RESOLVER = new StandardNameTransformer();
 
@@ -216,7 +220,7 @@ class BigQueryDestinationTest {
   @Test
   void testWriteSuccess() throws Exception {
     final BigQueryDestination destination = new BigQueryDestination();
-    final AirbyteMessageConsumer consumer = destination.getConsumer(config, CATALOG);
+    final DestinationConsumer<AirbyteMessage> consumer = destination.write(config, CATALOG);
 
     consumer.accept(MESSAGE_USERS1);
     consumer.accept(MESSAGE_TASKS1);
@@ -248,7 +252,7 @@ class BigQueryDestinationTest {
     final AirbyteMessage spiedMessage = spy(MESSAGE_USERS1);
     doThrow(new RuntimeException()).when(spiedMessage).getRecord();
 
-    final AirbyteMessageConsumer consumer = spy(new BigQueryDestination().getConsumer(config, CATALOG));
+    final DestinationConsumer<AirbyteMessage> consumer = spy(new BigQueryDestination().write(config, CATALOG));
 
     assertThrows(RuntimeException.class, () -> consumer.accept(spiedMessage));
     consumer.accept(MESSAGE_USERS2);

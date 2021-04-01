@@ -24,10 +24,7 @@
 
 package io.airbyte.integrations.destination.local_json;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -39,7 +36,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import io.airbyte.commons.json.Jsons;
 import io.airbyte.commons.resources.MoreResources;
-import io.airbyte.integrations.base.AirbyteMessageConsumer;
+import io.airbyte.integrations.base.DestinationConsumer;
 import io.airbyte.integrations.base.JavaBaseConstants;
 import io.airbyte.integrations.destination.StandardNameTransformer;
 import io.airbyte.protocol.models.AirbyteConnectionStatus;
@@ -71,6 +68,7 @@ class LocalJsonDestinationTest {
   private static final Path TEST_ROOT = Path.of("/tmp/airbyte_tests");
   private static final String USERS_STREAM_NAME = "users";
   private static final String TASKS_STREAM_NAME = "tasks";
+  private static final String STREAM_NAMESPACE = "tests";
   private static final String USERS_FILE = new StandardNameTransformer().getRawTableName(USERS_STREAM_NAME) + ".jsonl";
   private static final String TASKS_FILE = new StandardNameTransformer().getRawTableName(TASKS_STREAM_NAME) + ".jsonl";;
   private static final AirbyteMessage MESSAGE_USERS1 = new AirbyteMessage().withType(AirbyteMessage.Type.RECORD)
@@ -93,9 +91,13 @@ class LocalJsonDestinationTest {
       .withState(new AirbyteStateMessage().withData(Jsons.jsonNode(ImmutableMap.builder().put("checkpoint", "now!").build())));
 
   private static final ConfiguredAirbyteCatalog CATALOG = new ConfiguredAirbyteCatalog().withStreams(Lists.newArrayList(
-      CatalogHelpers.createConfiguredAirbyteStream(USERS_STREAM_NAME, Field.of("name", JsonSchemaPrimitive.STRING),
+      CatalogHelpers.createConfiguredAirbyteStream(
+          CatalogHelpers.createAirbyteStreamName(STREAM_NAMESPACE, USERS_STREAM_NAME),
+          Field.of("name", JsonSchemaPrimitive.STRING),
           Field.of("id", JsonSchemaPrimitive.STRING)),
-      CatalogHelpers.createConfiguredAirbyteStream(TASKS_STREAM_NAME, Field.of("goal", JsonSchemaPrimitive.STRING))));
+      CatalogHelpers.createConfiguredAirbyteStream(
+          CatalogHelpers.createAirbyteStreamName(STREAM_NAMESPACE, TASKS_STREAM_NAME),
+          Field.of("goal", JsonSchemaPrimitive.STRING))));
 
   private Path destinationPath;
   private JsonNode config;
@@ -160,7 +162,7 @@ class LocalJsonDestinationTest {
 
   @Test
   void testWriteSuccess() throws Exception {
-    final AirbyteMessageConsumer consumer = getDestination().getConsumer(config, CATALOG);
+    final DestinationConsumer<AirbyteMessage> consumer = getDestination().write(config, CATALOG);
 
     consumer.accept(MESSAGE_USERS1);
     consumer.accept(MESSAGE_TASKS1);
@@ -199,7 +201,7 @@ class LocalJsonDestinationTest {
     final AirbyteMessage spiedMessage = spy(MESSAGE_USERS1);
     doThrow(new RuntimeException()).when(spiedMessage).getRecord();
 
-    final AirbyteMessageConsumer consumer = spy(getDestination().getConsumer(config, CATALOG));
+    final DestinationConsumer<AirbyteMessage> consumer = spy(getDestination().write(config, CATALOG));
 
     assertThrows(RuntimeException.class, () -> consumer.accept(spiedMessage));
     consumer.accept(MESSAGE_USERS2);

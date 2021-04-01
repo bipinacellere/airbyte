@@ -29,7 +29,6 @@ import io.airbyte.commons.json.Jsons;
 import io.airbyte.config.DestinationConnection;
 import io.airbyte.config.SourceConnection;
 import io.airbyte.config.StandardSync;
-import io.airbyte.config.StandardSync.Status;
 import io.airbyte.config.StandardSyncInput;
 import io.airbyte.config.State;
 import io.airbyte.protocol.models.CatalogHelpers;
@@ -46,6 +45,7 @@ public class TestConfigHelpers {
 
   private static final String CONNECTION_NAME = "favorite_color_pipe";
   private static final String STREAM_NAME = "user_preferences";
+  private static final String STREAM_NAMESPACE = "tests";
   private static final String FIELD_NAME = "favorite_color";
   private static final long LAST_SYNC_TIME = 1598565106;
 
@@ -84,16 +84,17 @@ public class TestConfigHelpers {
         .withTombstone(false);
 
     final ConfiguredAirbyteStream stream = new ConfiguredAirbyteStream()
-        .withStream(CatalogHelpers.createAirbyteStream(STREAM_NAME, Field.of(FIELD_NAME, JsonSchemaPrimitive.STRING)));
+        .withStream(CatalogHelpers.createAirbyteStream(
+            CatalogHelpers.createAirbyteStreamName(STREAM_NAMESPACE, STREAM_NAME),
+            Field.of(FIELD_NAME, JsonSchemaPrimitive.STRING)));
     final ConfiguredAirbyteCatalog catalog = new ConfiguredAirbyteCatalog().withStreams(Collections.singletonList(stream));
 
     final StandardSync standardSync = new StandardSync()
         .withConnectionId(connectionId)
         .withDestinationId(destinationId)
         .withSourceId(sourceId)
-        .withStatus(Status.ACTIVE)
+        .withStatus(StandardSync.Status.ACTIVE)
         .withName(CONNECTION_NAME)
-        .withPrefix(CONNECTION_NAME)
         .withCatalog(catalog);
 
     final String stateValue = Jsons.serialize(Map.of("lastSync", String.valueOf(LAST_SYNC_TIME)));
@@ -101,7 +102,6 @@ public class TestConfigHelpers {
     final State state = new State().withState(Jsons.jsonNode(stateValue));
 
     final StandardSyncInput syncInput = new StandardSyncInput()
-        .withPrefix(standardSync.getPrefix())
         .withDestinationConfiguration(destinationConnectionConfig.getConfiguration())
         .withCatalog(standardSync.getCatalog())
         .withSourceConfiguration(sourceConnectionConfig.getConfiguration())

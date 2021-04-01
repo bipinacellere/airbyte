@@ -24,7 +24,7 @@
 
 package io.airbyte.server.handlers;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -40,12 +40,10 @@ import io.airbyte.api.model.ConnectionIdRequestBody;
 import io.airbyte.api.model.ConnectionRead;
 import io.airbyte.api.model.ConnectionReadList;
 import io.airbyte.api.model.ConnectionSchedule;
-import io.airbyte.api.model.ConnectionSchedule.TimeUnitEnum;
 import io.airbyte.api.model.ConnectionStatus;
 import io.airbyte.api.model.ConnectionUpdate;
 import io.airbyte.api.model.DestinationIdRequestBody;
 import io.airbyte.api.model.DestinationRead;
-import io.airbyte.api.model.DestinationSyncMode;
 import io.airbyte.api.model.JobConfigType;
 import io.airbyte.api.model.JobInfoRead;
 import io.airbyte.api.model.JobListRequestBody;
@@ -57,7 +55,6 @@ import io.airbyte.api.model.SourceDiscoverSchemaRead;
 import io.airbyte.api.model.SourceIdRequestBody;
 import io.airbyte.api.model.SourceRead;
 import io.airbyte.api.model.SyncMode;
-import io.airbyte.api.model.SynchronousJobRead;
 import io.airbyte.api.model.WbConnectionRead;
 import io.airbyte.api.model.WbConnectionReadList;
 import io.airbyte.api.model.WebBackendConnectionRequestBody;
@@ -97,6 +94,7 @@ class WebBackendConnectionsHandlerTest {
   private WebBackendConnectionsHandler wbHandler;
 
   private SourceRead sourceRead;
+  private DestinationRead destinationRead;
   private ConnectionRead connectionRead;
   private WbConnectionRead expected;
   private WbConnectionRead expectedWithNewSchema;
@@ -116,7 +114,7 @@ class WebBackendConnectionsHandlerTest {
 
     final StandardDestinationDefinition destinationDefinition = DestinationDefinitionHelpers.generateDestination();
     final DestinationConnection destination = DestinationHelpers.generateDestination(UUID.randomUUID());
-    DestinationRead destinationRead = DestinationHelpers.getDestinationRead(destination, destinationDefinition);
+    destinationRead = DestinationHelpers.getDestinationRead(destination, destinationDefinition);
 
     final StandardSync standardSync = ConnectionHelpers.generateSyncWithSourceId(source.getSourceId());
     connectionRead = ConnectionHelpers.generateExpectedConnectionRead(standardSync);
@@ -159,21 +157,19 @@ class WebBackendConnectionsHandlerTest {
         .sourceId(connectionRead.getSourceId())
         .destinationId(connectionRead.getDestinationId())
         .name(connectionRead.getName())
-        .prefix(connectionRead.getPrefix())
         .syncCatalog(connectionRead.getSyncCatalog())
         .status(connectionRead.getStatus())
         .schedule(connectionRead.getSchedule())
         .source(sourceRead)
         .destination(destinationRead)
-        .latestSyncJobCreatedAt(now.getEpochSecond())
-        .latestSyncJobStatus(JobStatus.SUCCEEDED)
+        .lastSync(now.getEpochSecond())
         .isSyncing(false);
 
     final AirbyteCatalog modifiedCatalog = ConnectionHelpers.generateBasicApiCatalog();
 
     when(schedulerHandler.discoverSchemaForSourceFromSourceId(sourceIdRequestBody)).thenReturn(
         new SourceDiscoverSchemaRead()
-            .jobInfo(mock(SynchronousJobRead.class))
+            .jobInfo(mock(JobInfoRead.class))
             .catalog(modifiedCatalog));
 
     expectedWithNewSchema = new WbConnectionRead()
@@ -181,14 +177,12 @@ class WebBackendConnectionsHandlerTest {
         .sourceId(expected.getSourceId())
         .destinationId(expected.getDestinationId())
         .name(expected.getName())
-        .prefix(expected.getPrefix())
         .syncCatalog(modifiedCatalog)
         .status(expected.getStatus())
         .schedule(expected.getSchedule())
         .source(expected.getSource())
         .destination(expected.getDestination())
-        .latestSyncJobCreatedAt(expected.getLatestSyncJobCreatedAt())
-        .latestSyncJobStatus(expected.getLatestSyncJobStatus())
+        .lastSync(expected.getLastSync())
         .isSyncing(expected.getIsSyncing());
 
     when(schedulerHandler.resetConnection(any())).thenReturn(new JobInfoRead().job(new JobRead().status(JobStatus.SUCCEEDED)));
@@ -245,12 +239,11 @@ class WebBackendConnectionsHandlerTest {
     final StandardSync standardSync = ConnectionHelpers.generateSyncWithSourceId(source.getSourceId());
 
     final AirbyteCatalog catalog = ConnectionHelpers.generateBasicApiCatalog();
-    catalog.getStreams().get(0).getStream().setName("azkaban_users");
+    catalog.getStreams().get(0).getStream().getStreamName().setName("azkaban_users");
 
-    final ConnectionSchedule schedule = new ConnectionSchedule().units(1L).timeUnit(TimeUnitEnum.MINUTES);
+    final ConnectionSchedule schedule = new ConnectionSchedule().units(1L).timeUnit(ConnectionSchedule.TimeUnitEnum.MINUTES);
 
     final WebBackendConnectionUpdate input = new WebBackendConnectionUpdate()
-        .prefix(standardSync.getPrefix())
         .connectionId(standardSync.getConnectionId())
         .status(ConnectionStatus.INACTIVE)
         .schedule(schedule)
@@ -258,7 +251,6 @@ class WebBackendConnectionsHandlerTest {
         .withRefreshedCatalog(false);
 
     final ConnectionUpdate expected = new ConnectionUpdate()
-        .prefix(standardSync.getPrefix())
         .connectionId(standardSync.getConnectionId())
         .status(ConnectionStatus.INACTIVE)
         .schedule(schedule)
@@ -271,7 +263,7 @@ class WebBackendConnectionsHandlerTest {
 
   @Test
   public void testForCompleteness() {
-    final Set<String> handledMethods = Set.of("schedule", "connectionId", "syncCatalog", "prefix", "status");
+    final Set<String> handledMethods = Set.of("schedule", "connectionId", "syncCatalog", "status");
 
     final Set<String> methods = Arrays.stream(ConnectionUpdate.class.getMethods())
         .filter(method -> method.getReturnType() == ConnectionUpdate.class)
@@ -287,7 +279,6 @@ class WebBackendConnectionsHandlerTest {
   @Test
   void testUpdateConnection() throws JsonValidationException, ConfigNotFoundException, IOException {
     WebBackendConnectionUpdate updateBody = new WebBackendConnectionUpdate()
-        .prefix(expected.getPrefix())
         .connectionId(expected.getConnectionId())
         .schedule(expected.getSchedule())
         .status(expected.getStatus())
@@ -299,7 +290,6 @@ class WebBackendConnectionsHandlerTest {
             .sourceId(expected.getSourceId())
             .destinationId(expected.getDestinationId())
             .name(expected.getName())
-            .prefix(expected.getPrefix())
             .syncCatalog(expected.getSyncCatalog())
             .status(expected.getStatus())
             .schedule(expected.getSchedule()));
@@ -316,7 +306,6 @@ class WebBackendConnectionsHandlerTest {
   @Test
   void testUpdateConnectionWithUpdatedSchema() throws JsonValidationException, ConfigNotFoundException, IOException {
     WebBackendConnectionUpdate updateBody = new WebBackendConnectionUpdate()
-        .prefix(expected.getPrefix())
         .connectionId(expected.getConnectionId())
         .schedule(expected.getSchedule())
         .status(expected.getStatus())
@@ -329,7 +318,6 @@ class WebBackendConnectionsHandlerTest {
             .sourceId(expected.getSourceId())
             .destinationId(expected.getDestinationId())
             .name(expected.getName())
-            .prefix(expected.getPrefix())
             .syncCatalog(expectedWithNewSchema.getSyncCatalog())
             .status(expected.getStatus())
             .schedule(expected.getSchedule()));
@@ -347,27 +335,23 @@ class WebBackendConnectionsHandlerTest {
   public void testUpdateSchemaWithDiscoveryFromEmpty() {
     final AirbyteCatalog original = new AirbyteCatalog().streams(List.of());
     final AirbyteCatalog discovered = ConnectionHelpers.generateBasicApiCatalog();
+    discovered.getStreams().get(0).getStream().getStreamName().name("stream1");
     discovered.getStreams().get(0).getStream()
-        .name("stream1")
         .jsonSchema(CatalogHelpers.fieldsToJsonSchema(Field.of("field1", JsonSchemaPrimitive.STRING)))
         .supportedSyncModes(List.of(SyncMode.FULL_REFRESH));
     discovered.getStreams().get(0).getConfig()
         .syncMode(SyncMode.FULL_REFRESH)
         .cursorField(Collections.emptyList())
-        .destinationSyncMode(DestinationSyncMode.OVERWRITE)
-        .primaryKey(Collections.emptyList())
         .aliasName("stream1");
 
     final AirbyteCatalog expected = ConnectionHelpers.generateBasicApiCatalog();
+    expected.getStreams().get(0).getStream().getStreamName().name("stream1");
     expected.getStreams().get(0).getStream()
-        .name("stream1")
         .jsonSchema(CatalogHelpers.fieldsToJsonSchema(Field.of("field1", JsonSchemaPrimitive.STRING)))
         .supportedSyncModes(List.of(SyncMode.FULL_REFRESH));
     expected.getStreams().get(0).getConfig()
         .syncMode(SyncMode.FULL_REFRESH)
         .cursorField(Collections.emptyList())
-        .destinationSyncMode(DestinationSyncMode.OVERWRITE)
-        .primaryKey(Collections.emptyList())
         .aliasName("stream1");
 
     final AirbyteCatalog actual = WebBackendConnectionsHandler.updateSchemaWithDiscovery(original, discovered);
@@ -378,8 +362,8 @@ class WebBackendConnectionsHandlerTest {
   @Test
   public void testUpdateSchemaWithDiscoveryResetStream() {
     final AirbyteCatalog original = ConnectionHelpers.generateBasicApiCatalog();
+    original.getStreams().get(0).getStream().getStreamName().name("random-stream");
     original.getStreams().get(0).getStream()
-        .name("random-stream")
         .defaultCursorField(List.of("field1"))
         .jsonSchema(CatalogHelpers.fieldsToJsonSchema(
             Field.of("field1", JsonSchemaPrimitive.NUMBER),
@@ -389,34 +373,28 @@ class WebBackendConnectionsHandlerTest {
     original.getStreams().get(0).getConfig()
         .syncMode(SyncMode.INCREMENTAL)
         .cursorField(List.of("field1"))
-        .destinationSyncMode(DestinationSyncMode.APPEND)
-        .primaryKey(Collections.emptyList())
         .aliasName("random_stream");
 
     final AirbyteCatalog discovered = ConnectionHelpers.generateBasicApiCatalog();
+    discovered.getStreams().get(0).getStream().getStreamName().name("stream1");
     discovered.getStreams().get(0).getStream()
-        .name("stream1")
         .defaultCursorField(List.of("field3"))
         .jsonSchema(CatalogHelpers.fieldsToJsonSchema(Field.of("field2", JsonSchemaPrimitive.STRING)))
         .supportedSyncModes(List.of(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL));
     discovered.getStreams().get(0).getConfig()
         .syncMode(SyncMode.FULL_REFRESH)
         .cursorField(Collections.emptyList())
-        .destinationSyncMode(DestinationSyncMode.OVERWRITE)
-        .primaryKey(Collections.emptyList())
         .aliasName("stream1");
 
     final AirbyteCatalog expected = ConnectionHelpers.generateBasicApiCatalog();
+    expected.getStreams().get(0).getStream().getStreamName().name("stream1");
     expected.getStreams().get(0).getStream()
-        .name("stream1")
         .defaultCursorField(List.of("field3"))
         .jsonSchema(CatalogHelpers.fieldsToJsonSchema(Field.of("field2", JsonSchemaPrimitive.STRING)))
         .supportedSyncModes(List.of(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL));
     expected.getStreams().get(0).getConfig()
         .syncMode(SyncMode.FULL_REFRESH)
         .cursorField(Collections.emptyList())
-        .destinationSyncMode(DestinationSyncMode.OVERWRITE)
-        .primaryKey(Collections.emptyList())
         .aliasName("stream1");
 
     final AirbyteCatalog actual = WebBackendConnectionsHandler.updateSchemaWithDiscovery(original, discovered);
@@ -427,8 +405,8 @@ class WebBackendConnectionsHandlerTest {
   @Test
   public void testUpdateSchemaWithDiscoveryMergeNewStream() {
     final AirbyteCatalog original = ConnectionHelpers.generateBasicApiCatalog();
+    original.getStreams().get(0).getStream().getStreamName().name("stream1");
     original.getStreams().get(0).getStream()
-        .name("stream1")
         .defaultCursorField(List.of("field1"))
         .jsonSchema(CatalogHelpers.fieldsToJsonSchema(
             Field.of("field1", JsonSchemaPrimitive.NUMBER),
@@ -438,59 +416,49 @@ class WebBackendConnectionsHandlerTest {
     original.getStreams().get(0).getConfig()
         .syncMode(SyncMode.INCREMENTAL)
         .cursorField(List.of("field1"))
-        .destinationSyncMode(DestinationSyncMode.APPEND)
-        .primaryKey(Collections.emptyList())
         .aliasName("renamed_stream");
 
     final AirbyteCatalog discovered = ConnectionHelpers.generateBasicApiCatalog();
+    discovered.getStreams().get(0).getStream().getStreamName().name("stream1");
     discovered.getStreams().get(0).getStream()
-        .name("stream1")
         .defaultCursorField(List.of("field3"))
         .jsonSchema(CatalogHelpers.fieldsToJsonSchema(Field.of("field2", JsonSchemaPrimitive.STRING)))
         .supportedSyncModes(List.of(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL));
     discovered.getStreams().get(0).getConfig()
         .syncMode(SyncMode.FULL_REFRESH)
         .cursorField(Collections.emptyList())
-        .destinationSyncMode(DestinationSyncMode.OVERWRITE)
-        .primaryKey(Collections.emptyList())
         .aliasName("stream1");
     final AirbyteStreamAndConfiguration newStream = ConnectionHelpers.generateBasicApiCatalog().getStreams().get(0);
+    newStream.getStream().getStreamName().name("stream2");
     newStream.getStream()
-        .name("stream2")
         .defaultCursorField(List.of("field5"))
         .jsonSchema(CatalogHelpers.fieldsToJsonSchema(Field.of("field5", JsonSchemaPrimitive.BOOLEAN)))
         .supportedSyncModes(List.of(SyncMode.FULL_REFRESH));
     newStream.getConfig()
         .syncMode(SyncMode.FULL_REFRESH)
         .cursorField(Collections.emptyList())
-        .destinationSyncMode(DestinationSyncMode.OVERWRITE)
-        .primaryKey(Collections.emptyList())
         .aliasName("stream2");
     discovered.getStreams().add(newStream);
 
     final AirbyteCatalog expected = ConnectionHelpers.generateBasicApiCatalog();
+    expected.getStreams().get(0).getStream().getStreamName().name("stream1");
     expected.getStreams().get(0).getStream()
-        .name("stream1")
         .defaultCursorField(List.of("field3"))
         .jsonSchema(CatalogHelpers.fieldsToJsonSchema(Field.of("field2", JsonSchemaPrimitive.STRING)))
         .supportedSyncModes(List.of(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL));
     expected.getStreams().get(0).getConfig()
         .syncMode(SyncMode.INCREMENTAL)
         .cursorField(List.of("field1"))
-        .destinationSyncMode(DestinationSyncMode.APPEND)
-        .primaryKey(Collections.emptyList())
         .aliasName("renamed_stream");
     final AirbyteStreamAndConfiguration expectedNewStream = ConnectionHelpers.generateBasicApiCatalog().getStreams().get(0);
+    expectedNewStream.getStream().getStreamName().name("stream2");
     expectedNewStream.getStream()
-        .name("stream2")
         .defaultCursorField(List.of("field5"))
         .jsonSchema(CatalogHelpers.fieldsToJsonSchema(Field.of("field5", JsonSchemaPrimitive.BOOLEAN)))
         .supportedSyncModes(List.of(SyncMode.FULL_REFRESH));
     expectedNewStream.getConfig()
         .syncMode(SyncMode.FULL_REFRESH)
         .cursorField(Collections.emptyList())
-        .destinationSyncMode(DestinationSyncMode.OVERWRITE)
-        .primaryKey(Collections.emptyList())
         .aliasName("stream2");
     expected.getStreams().add(expectedNewStream);
 

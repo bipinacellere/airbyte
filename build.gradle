@@ -54,7 +54,7 @@ def createSpotlessTarget = { pattern ->
         'secrets'
     ]
 
-    if (System.getenv().containsKey("CORE_ONLY")) {
+    if(System.getenv().containsKey("CORE_ONLY")) {
         excludes.add("airbyte-integrations/connectors")
     }
 
@@ -99,16 +99,16 @@ allprojects {
 
     afterEvaluate { project ->
         def composeDeps = [
-                ":airbyte-config:init",
-                ":airbyte-db",
-                ":airbyte-migration",
-                ":airbyte-scheduler:app",
-                ":airbyte-server",
-                ":airbyte-webapp",
+                "airbyte-config:init",
+                "airbyte-db",
+                "airbyte-migration",
+                "airbyte-scheduler",
+                "airbyte-server",
+                "airbyte-webapp",
         ].toSet().asImmutable()
 
-        if (project.getPath() in composeDeps) {
-            composeBuild.dependsOn(project.getPath() + ':assemble')
+        if (project.name in composeDeps) {
+            composeBuild.dependsOn(project.tasks.assemble)
         }
     }
 }
@@ -126,7 +126,7 @@ allprojects {
 // Java projects common configurations
 subprojects {
 
-    if (project.name == 'airbyte-webapp' || project.name == 'airbyte-e2e-testing') {
+    if (project.name == 'airbyte-webapp') {
         return
     }
 
