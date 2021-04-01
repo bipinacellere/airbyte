@@ -28,7 +28,7 @@ export const useSourceDefinitionSpecificationLoad = (
 ): {
   isLoading: boolean;
   error?: Error;
-  sourceDefinitionSpecification: SourceDefinitionSpecification;
+  sourceDefinitionSpecification?: SourceDefinitionSpecification;
 } => {
   const {
     loading: isLoading,
@@ -53,7 +53,6 @@ type SourceService = {
   }) => Promise<Source>;
   checkSourceConnection: (checkSourceConnectionPayload: {
     sourceId: string;
-    values?: ValuesProps;
   }) => Promise<Scheduler>;
   createSource: (createSourcePayload: {
     values: ValuesProps;
@@ -163,20 +162,7 @@ const useSource = (): SourceService => {
   };
 
   const checkSourceConnection = useCallback(
-    async ({
-      sourceId,
-      values,
-    }: {
-      sourceId: string;
-      values?: ValuesProps;
-    }) => {
-      if (values) {
-        return await sourceCheckConnectionShape({
-          connectionConfiguration: values.connectionConfiguration,
-          name: values.name,
-          sourceId: sourceId,
-        });
-      }
+    async ({ sourceId }: { sourceId: string }) => {
       return await sourceCheckConnectionShape({
         sourceId,
       });
