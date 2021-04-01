@@ -21,36 +21,26 @@ macro-paths: ["macros"]
 
 target-path: "../build"  # directory which will store compiled SQL files
 log-path: "../logs"  # directory which will store DBT logs
-modules-path: "/tmp/dbt_modules"  # directory which will store external DBT dependencies
+modules-path: "../dbt_modules"  # directory which will store external DBT dependencies
 
 clean-targets:         # directories to be removed by `dbt clean`
     - "build"
     - "dbt_modules"
 
+# https://docs.getdbt.com/reference/project-configs/quoting/
 quoting:
   database: true
-# Temporarily disabling the behavior of the ExtendedNameTransformer on table/schema names, see (issue #1785)
-# all schemas should be unquoted
-  schema: false
+  schema: true
   identifier: true
 
 # You can define configurations for models in the `source-paths` directory here.
 # Using these configurations, you can enable or disable models, change how they
 # are materialized, and more!
 models:
+  +materialized: table
   airbyte_utils:
-    generated:
-      airbyte_views:
-        +tags: airbyte_views
-        # see https://docs.getdbt.com/docs/building-a-dbt-project/building-models/materializations/
-        # Faster but harder to debug
-        +materialized: ephemeral
-        # May be slower on some destinations but generally recommended
-        # +materialized: view
-      airbyte_tables:
-        +tags: normalized_tables
-        +materialized: table
-    +materialized: table
+    temporary:
+      +schema: TMP
 
 vars:
   dbt_utils_dispatch_list: ['airbyte_utils']

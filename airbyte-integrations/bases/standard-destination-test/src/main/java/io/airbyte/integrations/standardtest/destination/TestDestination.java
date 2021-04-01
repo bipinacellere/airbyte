@@ -25,7 +25,6 @@
 package io.airbyte.integrations.standardtest.destination;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -41,22 +40,19 @@ import io.airbyte.config.JobGetSpecConfig;
 import io.airbyte.config.StandardCheckConnectionInput;
 import io.airbyte.config.StandardCheckConnectionOutput;
 import io.airbyte.config.StandardCheckConnectionOutput.Status;
+import io.airbyte.config.StandardGetSpecOutput;
+import io.airbyte.config.StandardSync.SyncMode;
 import io.airbyte.config.StandardTargetConfig;
+import io.airbyte.integrations.base.normalization.NormalizationRunnerFactory;
 import io.airbyte.protocol.models.AirbyteCatalog;
 import io.airbyte.protocol.models.AirbyteMessage;
 import io.airbyte.protocol.models.AirbyteRecordMessage;
 import io.airbyte.protocol.models.AirbyteStream;
 import io.airbyte.protocol.models.CatalogHelpers;
 import io.airbyte.protocol.models.ConfiguredAirbyteCatalog;
-import io.airbyte.protocol.models.ConnectorSpecification;
-import io.airbyte.protocol.models.DestinationSyncMode;
-import io.airbyte.protocol.models.SyncMode;
 import io.airbyte.workers.DefaultCheckConnectionWorker;
 import io.airbyte.workers.DefaultGetSpecWorker;
-import io.airbyte.workers.WorkerConstants;
-import io.airbyte.workers.WorkerException;
-import io.airbyte.workers.normalization.NormalizationRunner;
-import io.airbyte.workers.normalization.NormalizationRunnerFactory;
+import io.airbyte.workers.OutputAndStatus;
 import io.airbyte.workers.process.AirbyteIntegrationLauncher;
 import io.airbyte.workers.process.DockerProcessBuilderFactory;
 import io.airbyte.workers.process.ProcessBuilderFactory;
@@ -65,10 +61,7 @@ import io.airbyte.workers.protocols.airbyte.DefaultAirbyteDestination;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map.Entry;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -84,9 +77,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public abstract class TestDestination {
-
-  private static final String JOB_ID = "0";
-  private static final int JOB_ATTEMPT = 0;
 
   private static final Logger LOGGER = LoggerFactory.getLogger(TestDestination.class);
 
@@ -143,22 +133,6 @@ public abstract class TestDestination {
   }
 
   /**
-   * Detects if a destination implements incremental mode from the spec.json that should include
-   * 'supportsIncremental' = true
-   *
-   * @return - a boolean.
-   */
-  protected boolean implementsIncremental() throws WorkerException {
-    final ConnectorSpecification spec = runSpec();
-    assertNotNull(spec);
-    if (spec.getSupportsIncremental() != null) {
-      return spec.getSupportsIncremental();
-    } else {
-      return false;
-    }
-  }
-
-  /**
    * Same idea as {@link #retrieveRecords(TestDestinationEnv, String)}. Except this method should pull
    * records from the table that contains the normalized records and convert them back into the data
    * as it would appear in an {@link AirbyteRecordMessage}. Only need to override this method if
@@ -192,12 +166,6 @@ public abstract class TestDestination {
    */
   protected abstract void tearDown(TestDestinationEnv testEnv) throws Exception;
 
-  protected List<String> resolveIdentifier(String identifier) {
-    final List<String> result = new ArrayList<>();
-    result.add(identifier);
-    return result;
-  }
-
   @BeforeEach
   void setUpInternal() throws Exception {
     Path testDir = Path.of("/tmp/airbyte_tests/");
@@ -223,8 +191,9 @@ public abstract class TestDestination {
    * Verify that when the integrations returns a valid spec.
    */
   @Test
-  public void testGetSpec() throws WorkerException {
-    assertNotNull(runSpec());
+  public void testGetSpec() {
+    final OutputAndStatus<StandardGetSpecOutput> output = runSpec();
+    assertTrue(output.getOutput().isPresent());
   }
 
   /**
@@ -233,7 +202,9 @@ public abstract class TestDestination {
    */
   @Test
   public void testCheckConnection() throws Exception {
-    assertEquals(Status.SUCCEEDED, runCheck(getConfig()).getStatus());
+    final OutputAndStatus<StandardCheckConnectionOutput> output = runCheck(getConfig());
+    assertTrue(output.getOutput().isPresent());
+    assertEquals(Status.SUCCEEDED, output.getOutput().get().getStatus());
   }
 
   /**
@@ -242,7 +213,9 @@ public abstract class TestDestination {
    */
   @Test
   public void testCheckConnectionInvalidCredentials() throws Exception {
-    assertEquals(Status.FAILED, runCheck(getFailCheckConfig()).getStatus());
+    final OutputAndStatus<StandardCheckConnectionOutput> output = runCheck(getFailCheckConfig());
+    assertTrue(output.getOutput().isPresent());
+    assertEquals(Status.FAILED, output.getOutput().get().getStatus());
   }
 
   private static class DataArgumentsProvider implements ArgumentsProvider {
@@ -276,47 +249,6 @@ public abstract class TestDestination {
   }
 
   /**
-   * Verify that the integration successfully writes records incrementally. The second run should
-   * append records to the datastore instead of overwriting the previous run.
-   */
-  @Test
-  public void testIncrementalSync() throws Exception {
-    if (!implementsIncremental()) {
-      LOGGER.info("Destination's spec.json does not include '\"supportsIncremental\" ; true'");
-      return;
-    }
-
-    testIncrementalSync("exchange_rate_messages.txt", "exchange_rate_catalog.json");
-  }
-
-  public void testIncrementalSync(String messagesFilename, String catalogFilename) throws Exception {
-    final AirbyteCatalog catalog =
-        Jsons.deserialize(MoreResources.readResource(catalogFilename), AirbyteCatalog.class);
-    final ConfiguredAirbyteCatalog configuredCatalog = CatalogHelpers.toDefaultConfiguredCatalog(catalog);
-    configuredCatalog.getStreams().forEach(s -> {
-      s.withSyncMode(SyncMode.INCREMENTAL);
-      s.withDestinationSyncMode(DestinationSyncMode.APPEND);
-    });
-    final List<AirbyteMessage> firstSyncMessages = MoreResources.readResource(messagesFilename).lines()
-        .map(record -> Jsons.deserialize(record, AirbyteMessage.class)).collect(Collectors.toList());
-    runSync(getConfig(), firstSyncMessages, configuredCatalog);
-
-    final List<AirbyteMessage> secondSyncMessages = Lists.newArrayList(new AirbyteMessage()
-        .withRecord(new AirbyteRecordMessage()
-            .withStream(catalog.getStreams().get(0).getName())
-            .withData(Jsons.jsonNode(ImmutableMap.builder()
-                .put("date", "2020-03-31T00:00:00Z")
-                .put("HKD", 10)
-                .put("NZD", 700)
-                .build()))));
-    runSync(getConfig(), secondSyncMessages, configuredCatalog);
-    final List<AirbyteMessage> expectedMessagesAfterSecondSync = new ArrayList<>();
-    expectedMessagesAfterSecondSync.addAll(firstSyncMessages);
-    expectedMessagesAfterSecondSync.addAll(secondSyncMessages);
-    assertSameMessages(expectedMessagesAfterSecondSync, retrieveRecordsForCatalog(catalog));
-  }
-
-  /**
    * Verify that the integration successfully writes records successfully both raw and normalized.
    * Tests a wide variety of messages an schemas (aspirationally, anyway).
    */
@@ -333,9 +265,7 @@ public abstract class TestDestination {
         .map(record -> Jsons.deserialize(record, AirbyteMessage.class)).collect(Collectors.toList());
     runSync(getConfigWithBasicNormalization(), messages, configuredCatalog);
 
-    LOGGER.info("Comparing retrieveRecordsForCatalog for {} and {}", messagesFilename, catalogFilename);
     assertSameMessages(messages, retrieveRecordsForCatalog(catalog));
-    LOGGER.info("Comparing retrieveNormalizedRecordsForCatalog for {} and {}", messagesFilename, catalogFilename);
     assertSameMessages(messages, retrieveNormalizedRecordsForCatalog(catalog), true);
   }
 
@@ -363,13 +293,13 @@ public abstract class TestDestination {
     assertSameMessages(secondSyncMessages, retrieveRecordsForCatalog(catalog));
   }
 
-  private ConnectorSpecification runSpec() throws WorkerException {
-    return new DefaultGetSpecWorker(new AirbyteIntegrationLauncher(JOB_ID, JOB_ATTEMPT, getImageName(), pbf))
+  private OutputAndStatus<StandardGetSpecOutput> runSpec() {
+    return new DefaultGetSpecWorker(new AirbyteIntegrationLauncher(getImageName(), pbf))
         .run(new JobGetSpecConfig().withDockerImage(getImageName()), jobRoot);
   }
 
-  private StandardCheckConnectionOutput runCheck(JsonNode config) throws WorkerException {
-    return new DefaultCheckConnectionWorker(new AirbyteIntegrationLauncher(JOB_ID, JOB_ATTEMPT, getImageName(), pbf))
+  private OutputAndStatus<StandardCheckConnectionOutput> runCheck(JsonNode config) {
+    return new DefaultCheckConnectionWorker(new AirbyteIntegrationLauncher(getImageName(), pbf))
         .run(new StandardCheckConnectionInput().withConnectionConfiguration(config), jobRoot);
   }
 
@@ -377,30 +307,16 @@ public abstract class TestDestination {
 
     final StandardTargetConfig targetConfig = new StandardTargetConfig()
         .withConnectionId(UUID.randomUUID())
+        .withSyncMode(SyncMode.FULL_REFRESH)
         .withCatalog(catalog)
         .withDestinationConnectionConfiguration(config);
 
-    final AirbyteDestination target = new DefaultAirbyteDestination(new AirbyteIntegrationLauncher(JOB_ID, JOB_ATTEMPT, getImageName(), pbf));
+    final AirbyteDestination target = new DefaultAirbyteDestination(new AirbyteIntegrationLauncher(getImageName(), pbf));
 
     target.start(targetConfig, jobRoot);
     messages.forEach(message -> Exceptions.toRuntime(() -> target.accept(message)));
     target.notifyEndOfStream();
     target.close();
-
-    // skip if basic normalization is not configured to run (either not set or false).
-    if (!config.hasNonNull(WorkerConstants.BASIC_NORMALIZATION_KEY) || !config.get(WorkerConstants.BASIC_NORMALIZATION_KEY).asBoolean()) {
-      return;
-    }
-
-    final NormalizationRunner runner = NormalizationRunnerFactory.create(
-        getImageName(),
-        pbf, targetConfig.getDestinationConnectionConfiguration());
-    runner.start();
-    final Path normalizationRoot = Files.createDirectories(jobRoot.resolve("normalize"));
-    if (!runner.normalize(JOB_ID, JOB_ATTEMPT, normalizationRoot, targetConfig.getDestinationConnectionConfiguration(), targetConfig.getCatalog())) {
-      throw new WorkerException("Normalization Failed.");
-    }
-    runner.close();
   }
 
   private List<AirbyteRecordMessage> retrieveNormalizedRecordsForCatalog(AirbyteCatalog catalog) throws Exception {
@@ -435,52 +351,27 @@ public abstract class TestDestination {
 
   // ignores emitted at.
   private void assertSameMessages(List<AirbyteMessage> expected, List<AirbyteRecordMessage> actual, boolean pruneAirbyteInternalFields) {
-    final List<JsonNode> expectedProcessed = expected.stream()
+    final List<AirbyteRecordMessage> expectedProcessed = expected.stream()
         .filter(message -> message.getType() == AirbyteMessage.Type.RECORD)
         .map(AirbyteMessage::getRecord)
         .peek(recordMessage -> recordMessage.setEmittedAt(null))
-        .map(recordMessage -> pruneAirbyteInternalFields ? safePrune(recordMessage) : recordMessage)
-        .map(recordMessage -> recordMessage.getData())
+        .map(recordMessage -> pruneAirbyteInternalFields ? this.safePrune(recordMessage) : recordMessage)
         .collect(Collectors.toList());
 
-    final List<JsonNode> actualProcessed = actual.stream()
-        .map(recordMessage -> pruneAirbyteInternalFields ? safePrune(recordMessage) : recordMessage)
-        .map(recordMessage -> recordMessage.getData())
+    final List<AirbyteRecordMessage> actualProcessed = actual.stream()
+        .map(recordMessage -> pruneAirbyteInternalFields ? this.safePrune(recordMessage) : recordMessage)
         .collect(Collectors.toList());
-
     assertSameData(expectedProcessed, actualProcessed);
   }
 
-  private void assertSameData(List<JsonNode> expected, List<JsonNode> actual) {
-    LOGGER.info("Expected data {}", expected);
-    LOGGER.info("Actual data   {}", actual);
+  private void assertSameData(List<AirbyteRecordMessage> expected, List<AirbyteRecordMessage> actual) {
+    LOGGER.info("expected: {}", expected);
+    LOGGER.info("actual: {}", actual);
+
+    // we want to ignore order in this comparison.
     assertEquals(expected.size(), actual.size());
-    final Iterator<JsonNode> expectedIterator = expected.iterator();
-    final Iterator<JsonNode> actualIterator = actual.iterator();
-    while (expectedIterator.hasNext() && actualIterator.hasNext()) {
-      final JsonNode expectedData = expectedIterator.next();
-      final JsonNode actualData = actualIterator.next();
-      final Iterator<Entry<String, JsonNode>> expectedDataIterator = expectedData.fields();
-      LOGGER.info("Expected row {}", expectedData);
-      LOGGER.info("Actual row   {}", actualData);
-      assertEquals(expectedData.size(), actualData.size());
-      while (expectedDataIterator.hasNext()) {
-        final Entry<String, JsonNode> expectedEntry = expectedDataIterator.next();
-        final JsonNode expectedValue = expectedEntry.getValue();
-        JsonNode actualValue = null;
-        String key = expectedEntry.getKey();
-        for (String tmpKey : resolveIdentifier(expectedEntry.getKey())) {
-          actualValue = actualData.get(tmpKey);
-          if (actualValue != null) {
-            key = tmpKey;
-            break;
-          }
-        }
-        LOGGER.info("For {} Expected {} vs Actual {}", key, expectedValue, actualValue);
-        assertTrue(actualData.has(key));
-        assertEquals(expectedValue, actualValue);
-      }
-    }
+    assertTrue(expected.containsAll(actual));
+    assertTrue(actual.containsAll(expected));
   }
 
   /**
@@ -518,16 +409,7 @@ public abstract class TestDestination {
       // likely did not exist in the original message. the most consistent thing to do is always remove
       // the null fields (this choice does decrease our ability to check that normalization creates
       // columns even if all the values in that column are null)
-      final HashSet<String> airbyteInternalFields = Sets.newHashSet(
-          "emitted_at",
-          "ab_id",
-          "normalized_at",
-          "EMITTED_AT",
-          "AB_ID",
-          "NORMALIZED_AT",
-          "HASHID");
-      if (airbyteInternalFields.stream().anyMatch(internalField -> key.toLowerCase().contains(internalField.toLowerCase()))
-          || json.get(key).isNull()) {
+      if (Sets.newHashSet("emitted_at", "ab_id", "normalized_at").contains(key) || key.matches("^_.*_hashid$") || json.get(key).isNull()) {
         ((ObjectNode) json).remove(key);
       }
     }
@@ -535,7 +417,7 @@ public abstract class TestDestination {
 
   private JsonNode getConfigWithBasicNormalization() throws Exception {
     final JsonNode config = getConfig();
-    ((ObjectNode) config).put(WorkerConstants.BASIC_NORMALIZATION_KEY, true);
+    ((ObjectNode) config).put(NormalizationRunnerFactory.BASIC_NORMALIZATION_KEY, true);
     return config;
   }
 
