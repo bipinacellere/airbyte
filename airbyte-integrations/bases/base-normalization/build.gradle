@@ -1,0 +1,17 @@
+plugins {
+    id 'airbyte-docker'
+    id 'airbyte-python'
+}
+
+airbytePython {
+    moduleDirectory 'normalization'
+}
+
+dependencies {
+    implementation files(project(':airbyte-integrations:bases:airbyte-protocol').airbyteDocker.outputs)
+}
+
+installReqs.dependsOn(":airbyte-integrations:bases:airbyte-protocol:installReqs")
+
+project.task('integrationTest')
+integrationTest.dependsOn(build)

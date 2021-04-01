@@ -1,0 +1,230 @@
+plugins {
+    id 'base'
+    id 'pmd'
+    id 'com.diffplug.spotless' version '5.7.0'
+}
+
+repositories {
+    mavenCentral()
+}
+
+Properties env = new Properties()
+rootProject.file('.env').withInputStream { env.load(it) }
+
+if (!env.containsKey('VERSION')) {
+    throw new Exception('Version not specified in .env file...')
+}
+
+def createLicenseWith = { File license, String startComment, String endComment, String lineComment ->
+    def tmp = File.createTempFile('tmp', '.tmp')
+    tmp.withWriter {
+        def w = it
+        w.writeLine(startComment)
+        license.eachLine {
+            w << lineComment
+            w.writeLine(it)
+        }
+        w.writeLine(endComment)
+        w.writeLine("")
+    }
+    return tmp
+}
+
+def createPythonLicenseWith = { license ->
+    return createLicenseWith(license, '"""', '"""', "")
+}
+
+def createJavaLicenseWith = { license ->
+    return createLicenseWith(license, '/*', ' */', " * ")
+}
+
+// We are the spotless exclusions rules using file tree. It seems the excludeTarget option is super finicky in a
+// monorepo setup and it doesn't actually exclude directories reliably. This code makes the behavior predictable.
+def createSpotlessTarget = { pattern ->
+    def excludes = [
+        '.gradle',
+        'node_modules',
+        '.eggs',
+        '.mypy_cache',
+        '.venv',
+        '*.egg-info',
+        'build',
+        'dbt-project-template',
+        'tools',
+        'secrets'
+    ]
+
+    if (System.getenv().containsKey("CORE_ONLY")) {
+        excludes.add("airbyte-integrations/connectors")
+    }
+
+    return fileTree(dir: rootDir, include: pattern, exclude: excludes.collect {"**/${it}"})
+}
+
+spotless {
+    java {
+        target createSpotlessTarget('**/*.java')
+
+        importOrder()
+
+        eclipse('4.16.0').configFile(rootProject.file('tools/gradle/codestyle/java-google-style.xml'))
+
+        licenseHeaderFile createJavaLicenseWith(rootProject.file('LICENSE'))
+        removeUnusedImports()
+        trimTrailingWhitespace()
+    }
+    groovyGradle {
+        target createSpotlessTarget('**/*.gradle')
+    }
+    sql {
+        target createSpotlessTarget('**/*.sql')
+
+        dbeaver().configFile(rootProject.file('tools/gradle/codestyle/sql-dbeaver.properties'))
+    }
+    python {
+        target createSpotlessTarget('**/*.py')
+
+        licenseHeaderFile createPythonLicenseWith(rootProject.file('LICENSE')), '(from|import|def|#)'
+    }
+    format 'styling', {
+        target createSpotlessTarget(['**/*.yaml', '**/*.json'])
+
+        prettier()
+    }
+}
+check.dependsOn 'spotlessApply'
+
+allprojects {
+    apply plugin: 'base'
+
+    afterEvaluate { project ->
+        def composeDeps = [
+                ":airbyte-config:init",
+                ":airbyte-db",
+                ":airbyte-migration",
+                ":airbyte-scheduler:app",
+                ":airbyte-server",
+                ":airbyte-webapp",
+        ].toSet().asImmutable()
+
+        if (project.getPath() in composeDeps) {
+            composeBuild.dependsOn(project.getPath() + ':assemble')
+        }
+    }
+}
+
+allprojects {
+    // by default gradle uses directory as the project name. That works very well in a single project environment but
+    // projects clobber each other in an environments with subprojects when projects are in directories named identically.
+    def sub = rootDir.relativePath(projectDir.parentFile).replace('/', '.')
+    group = "io.${rootProject.name}${sub.isEmpty() ? '' : ".$sub"}"
+    project.archivesBaseName = "${project.group}-${project.name}"
+
+    version = env.VERSION
+}
+
+// Java projects common configurations
+subprojects {
+
+    if (project.name == 'airbyte-webapp' || project.name == 'airbyte-e2e-testing') {
+        return
+    }
+
+    apply plugin: 'java'
+    apply plugin: 'jacoco'
+
+    sourceCompatibility = JavaVersion.VERSION_14
+    targetCompatibility = JavaVersion.VERSION_14
+
+    repositories {
+        mavenCentral()
+    }
+
+    pmd {
+        consoleOutput = true
+
+        rulePriority = 5
+        ruleSets = []
+        ruleSetFiles = files(rootProject.file('tools/gradle/pmd/rules.xml'))
+    }
+
+    test {
+        useJUnitPlatform()
+        testLogging() {
+            events 'failed'
+            exceptionFormat 'full'
+            // showStandardStreams = true
+        }
+        finalizedBy jacocoTestReport
+    }
+
+    jacocoTestReport {
+        dependsOn test
+    }
+
+    dependencies {
+        if (project.name != 'airbyte-commons') {
+            implementation project(':airbyte-commons')
+        }
+
+        implementation(platform("com.fasterxml.jackson:jackson-bom:2.10.4"))
+        implementation(platform("org.glassfish.jersey:jersey-bom:2.31"))
+
+        // version is handled by "com.fasterxml.jackson:jackson-bom:2.10.4", so we do not explicitly set it here.
+        implementation 'com.fasterxml.jackson.core:jackson-databind'
+        implementation 'com.fasterxml.jackson.core:jackson-annotations'
+        implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml'
+
+        implementation group: 'com.google.guava', name: 'guava', version: '29.0-jre'
+
+        implementation group: 'commons-io', name: 'commons-io', version: '2.7'
+
+        implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.30'
+
+        // SLF4J as a facade over Log4j2 required dependencies
+        implementation group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.11.0'
+        implementation group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.11.0'
+        implementation group: 'org.apache.logging.log4j', name: 'log4j-slf4j-impl', version: '2.11.0'
+
+        // Bridges from other logging implementations to SLF4J
+        implementation group: 'org.slf4j', name: 'jul-to-slf4j', version: '1.7.30' // JUL bridge
+        implementation group: 'org.slf4j', name: 'jcl-over-slf4j', version: '1.7.30' //JCL bridge
+        implementation group: 'org.slf4j', name: 'log4j-over-slf4j', version: '1.7.30' // log4j1.2 bridge
+
+        testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.4.2'
+        testImplementation 'org.junit.jupiter:junit-jupiter-api:5.4.2'
+        testImplementation 'org.junit.jupiter:junit-jupiter-params:5.4.2'
+        testImplementation group: 'org.mockito', name: 'mockito-junit-jupiter', version: '3.4.6'
+    }
+}
+
+task composeBuild {
+    def buildTag = System.getenv('VERSION') ?: 'dev'
+    doFirst {
+        exec {
+            workingDir rootDir
+            commandLine 'docker-compose', '-f', 'docker-compose.build.yaml', 'build', '--parallel', '--quiet'
+            environment 'VERSION', buildTag
+        }
+    }
+}
+build.dependsOn(composeBuild)
+
+task('generate') {
+    dependsOn subprojects.collect { it.getTasksByName('generateSeed', true) }
+    dependsOn subprojects.collect { it.getTasksByName('generateProtocolClassFiles', true) }
+    dependsOn subprojects.collect { it.getTasksByName('generateJsonSchema2Pojo', true) }
+}
+
+task('format') {
+    dependsOn generate
+    dependsOn spotlessApply
+    dependsOn subprojects.collect { it.getTasksByName('airbytePythonFormat', true) }
+}
+
+// produce reproducible archives
+// (see https://docs.gradle.org/current/userguide/working_with_files.html#sec:reproducible_archives)
+tasks.withType(AbstractArchiveTask) {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
