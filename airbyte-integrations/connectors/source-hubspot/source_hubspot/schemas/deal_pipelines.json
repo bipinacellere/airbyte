@@ -2,69 +2,46 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
-    "label": {
-      "type": "string"
-    },
-    "displayOrder": {
-      "type": "integer"
-    },
-    "active": {
-      "type": "boolean"
+    "pipelineId": {
+      "type": ["null", "string"]
     },
     "stages": {
-      "type": "array",
+      "type": ["null", "array"],
       "items": {
         "type": "object",
         "properties": {
-          "label": {
-            "type": "string"
-          },
-          "displayOrder": {
-            "type": "integer"
-          },
-          "metadata": {
-            "type": "object",
-            "properties": {
-              "isClosed": {
-                "type": "string"
-              },
-              "probability": {
-                "type": "string"
-              }
-            }
-          },
           "stageId": {
-            "type": "string"
+            "type": ["null", "string"]
           },
-          "createdAt": {
-            "type": ["null", "integer"]
+          "label": {
+            "type": ["null", "string"]
           },
-          "updatedAt": {
-            "type": ["null", "integer"]
+          "probability": {
+            "type": ["null", "number"]
           },
           "active": {
-            "type": "boolean"
+            "type": ["null", "boolean"]
+          },
+          "displayOrder": {
+            "type": ["null", "integer"]
+          },
+          "closedWon": {
+            "type": ["null", "boolean"]
           }
         }
       }
     },
-    "objectType": {
-      "type": "string"
+    "label": {
+      "type": ["null", "string"]
     },
-    "objectTypeId": {
-      "type": "string"
+    "active": {
+      "type": ["null", "boolean"]
     },
-    "pipelineId": {
-      "type": "string"
-    },
-    "createdAt": {
-      "type": "integer"
-    },
-    "updatedAt": {
+    "displayOrder": {
       "type": ["null", "integer"]
     },
-    "default": {
-      "type": "boolean"
+    "staticDefault": {
+      "type": ["null", "boolean"]
     }
   }
 }
