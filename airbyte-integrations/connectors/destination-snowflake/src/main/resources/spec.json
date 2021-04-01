@@ -1,13 +1,13 @@
 {
   "documentationUrl": "https://docs.airbyte.io/integrations/destinations/snowflake",
   "supportsIncremental": true,
-  "supported_destination_sync_modes": ["overwrite", "append", "append_dedup"],
   "connectionSpecification": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "Snowflake Destination Spec",
     "type": "object",
     "required": [
       "host",
+      "authenticator",
       "role",
       "warehouse",
       "database",
@@ -23,6 +23,13 @@
         "examples": ["accountname.us-east-2.aws.snowflakecomputing.com"],
         "type": "string"
       },
+
+      "authenticator": {
+        "description": "Specifies the authenticator to use for verifying user login credentials, optional parameter",
+        "examples": ["https://<okta_account_name>.okta.com"],
+        "type": "string"
+      },
+
       "role": {
         "description": "The role you created for Airbyte to access Snowflake.",
         "examples": ["AIRBYTE_ROLE"],
