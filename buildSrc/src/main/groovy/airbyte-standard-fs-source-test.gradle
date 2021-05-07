@@ -1,6 +1,7 @@
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 
+
 abstract class AirbyteStandardFsSourceTestConfiguration {
     String configPath
     String configuredCatalogPath
