@@ -1,6 +1,6 @@
 # Overview
 
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/airbytehq/airbyte/Airbyte%20CI) ![License](https://img.shields.io/github/license/airbytehq/airbyte)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/airbytehq/airbyte/Airbyte%20CI) ![License](https://img.shields.io/github/license/airbytehq/airbyte) ![Embold](http://a6d573b3991d.ngrok.io/api/badges?repository_uid=05f022faaebb4d675e087531c91d80d9&type=rating)
 
 ![](docs/.gitbook/assets/airbyte_horizontal_color_white-background.svg)
 
