@@ -4,6 +4,7 @@
 /airbyte) 
 
 **Embold V2: Badges**
+
 ![Embold](http://a6d573b3991d.ngrok.io/api/badges?repository_uid=05f022faaebb4d675e087531c91d80d9&type=rating)
 
 **Embold V1: Badges**
