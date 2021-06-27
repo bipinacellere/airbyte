@@ -1,7 +1,7 @@
 # Overview
 
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/airbytehq/airbyte/Airbyte%20CI) ![License](https://img.shields.io/github/license/airbytehq
-/airbyte) 
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/airbytehq/airbyte/Airbyte%20CI) 
+![License](https://img.shields.io/github/license/airbyteh/airbyte)
 
 **Embold V2: Badges**
 
