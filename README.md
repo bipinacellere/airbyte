@@ -1,6 +1,14 @@
 # Overview
 
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/airbytehq/airbyte/Airbyte%20CI) ![License](https://img.shields.io/github/license/airbytehq/airbyte) ![Embold](http://a6d573b3991d.ngrok.io/api/badges?repository_uid=05f022faaebb4d675e087531c91d80d9&type=rating)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/airbytehq/airbyte/Airbyte%20CI) ![License](https://img.shields.io/github/license/airbytehq
+/airbyte) 
+
+**Embold V2: Badges**
+![Embold](http://a6d573b3991d.ngrok.io/api/badges?repository_uid=05f022faaebb4d675e087531c91d80d9&type=rating)
+
+**Embold V1: Badges**
+
+![Embold](http://bcf9988c6fc2.ngrok.io/api/badges?repository_uid=8991df76aef8c2e62f363d6fa53889d6&type=rating&token=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTYxODQ3NzQ4NDczNCwiaWF0IjoxNjE4NDc3NDg0fQ.uBYKJWTXlOyQ9LSubeSIj-QTJN2HBsP5pZH23GPFqTwmrwJg_5qlenYex7y8BjEc0p6qgflTElZLbUiqZY9eSw) ![Embold](http://bcf9988c6fc2.ngrok.io/api/badges?repository_uid=8991df76aef8c2e62f363d6fa53889d6&type=quality_gate&token=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTYxODQ3NzQ4NDczNCwiaWF0IjoxNjE4NDc3NDg0fQ.uBYKJWTXlOyQ9LSubeSIj-QTJN2HBsP5pZH23GPFqTwmrwJg_5qlenYex7y8BjEc0p6qgflTElZLbUiqZY9eSw)
 
 ![](docs/.gitbook/assets/airbyte_horizontal_color_white-background.svg)
 
