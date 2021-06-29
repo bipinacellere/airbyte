@@ -3,11 +3,11 @@
 ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/airbytehq/airbyte/Airbyte%20CI) 
 ![License](https://img.shields.io/github/license/airbytehq/airbyte)
 
-**Embold V2: Badges**
+## Embold V2: Badges
 
 ![Embold](https://v2.emboldct.dev/api/badges?repository_uid=d2d0b995c6920a4462c3746dab758d9c&type=rating)
 
-**Embold V1: Badges**
+## Embold V1: Badges
 
 ![Embold](http://f11c5792af6b.ngrok.io/api/badges?repository_uid=b4ecec595c574b108501590dfb7e9f81&type=rating&token=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTYxODQ3NzQ4NDczNCwiaWF0IjoxNjE4NDc3NDg0fQ.uBYKJWTXlOyQ9LSubeSIj-QTJN2HBsP5pZH23GPFqTwmrwJg_5qlenYex7y8BjEc0p6qgflTElZLbUiqZY9eSw) ![Embold](http://f11c5792af6b.ngrok.io/api/badges?repository_uid=b4ecec595c574b108501590dfb7e9f81&type=quality_gate&token=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTYxODQ3NzQ4NDczNCwiaWF0IjoxNjE4NDc3NDg0fQ.uBYKJWTXlOyQ9LSubeSIj-QTJN2HBsP5pZH23GPFqTwmrwJg_5qlenYex7y8BjEc0p6qgflTElZLbUiqZY9eSw)
 
