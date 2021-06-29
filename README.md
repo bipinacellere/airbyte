@@ -9,7 +9,7 @@
 
 **Embold V1: Badges**
 
-![Embold](http://bcf9988c6fc2.ngrok.io/api/badges?repository_uid=8991df76aef8c2e62f363d6fa53889d6&type=rating&token=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTYxODQ3NzQ4NDczNCwiaWF0IjoxNjE4NDc3NDg0fQ.uBYKJWTXlOyQ9LSubeSIj-QTJN2HBsP5pZH23GPFqTwmrwJg_5qlenYex7y8BjEc0p6qgflTElZLbUiqZY9eSw) ![Embold](http://bcf9988c6fc2.ngrok.io/api/badges?repository_uid=8991df76aef8c2e62f363d6fa53889d6&type=quality_gate&token=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTYxODQ3NzQ4NDczNCwiaWF0IjoxNjE4NDc3NDg0fQ.uBYKJWTXlOyQ9LSubeSIj-QTJN2HBsP5pZH23GPFqTwmrwJg_5qlenYex7y8BjEc0p6qgflTElZLbUiqZY9eSw)
+![Embold](http://f11c5792af6b.ngrok.io/api/badges?repository_uid=b4ecec595c574b108501590dfb7e9f81&type=rating&token=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTYxODQ3NzQ4NDczNCwiaWF0IjoxNjE4NDc3NDg0fQ.uBYKJWTXlOyQ9LSubeSIj-QTJN2HBsP5pZH23GPFqTwmrwJg_5qlenYex7y8BjEc0p6qgflTElZLbUiqZY9eSw) ![Embold](http://f11c5792af6b.ngrok.io/api/badges?repository_uid=b4ecec595c574b108501590dfb7e9f81&type=quality_gate&token=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTYxODQ3NzQ4NDczNCwiaWF0IjoxNjE4NDc3NDg0fQ.uBYKJWTXlOyQ9LSubeSIj-QTJN2HBsP5pZH23GPFqTwmrwJg_5qlenYex7y8BjEc0p6qgflTElZLbUiqZY9eSw)
 
 ![](docs/.gitbook/assets/airbyte_horizontal_color_white-background.svg)
 
