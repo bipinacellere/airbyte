@@ -5,7 +5,7 @@
 
 **Embold V2: Badges**
 
-![Embold](http://a6d573b3991d.ngrok.io/api/badges?repository_uid=05f022faaebb4d675e087531c91d80d9&type=rating)
+![Embold](https://v2.emboldct.dev/api/badges?repository_uid=d2d0b995c6920a4462c3746dab758d9c&type=rating)
 
 **Embold V1: Badges**
 
