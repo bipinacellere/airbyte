@@ -25,56 +25,47 @@
 package io.airbyte.workers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.collect.ImmutableMap;
 import io.airbyte.commons.json.Jsons;
-import io.airbyte.config.StandardSync;
 import io.airbyte.config.StandardSyncInput;
 import io.airbyte.config.StandardSyncOutput;
-import io.airbyte.config.StandardSyncSummary;
-import io.airbyte.config.StandardSyncSummary.Status;
 import io.airbyte.config.StandardTapConfig;
 import io.airbyte.config.StandardTargetConfig;
-import io.airbyte.config.State;
 import io.airbyte.protocol.models.AirbyteMessage;
-import io.airbyte.workers.normalization.NormalizationRunner;
-import io.airbyte.workers.protocols.MessageTracker;
+import io.airbyte.protocol.models.ConfiguredAirbyteCatalog;
+import io.airbyte.protocol.models.ConfiguredAirbyteStream;
 import io.airbyte.workers.protocols.airbyte.AirbyteDestination;
 import io.airbyte.workers.protocols.airbyte.AirbyteMessageTracker;
 import io.airbyte.workers.protocols.airbyte.AirbyteMessageUtils;
 import io.airbyte.workers.protocols.airbyte.AirbyteSource;
-import io.airbyte.workers.protocols.airbyte.NamespacingMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
-import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class DefaultSyncWorkerTest {
 
-  private static final String JOB_ID = "0";
-  private static final int JOB_ATTEMPT = 0;
   private static final Path WORKSPACE_ROOT = Path.of("workspaces/10");
   private static final String STREAM_NAME = "user_preferences";
+  private static final String INVALID_STREAM_NAME = "invalid stream name";
   private static final String FIELD_NAME = "favorite_color";
   private static final AirbyteMessage RECORD_MESSAGE1 = AirbyteMessageUtils.createRecordMessage(STREAM_NAME, FIELD_NAME, "blue");
   private static final AirbyteMessage RECORD_MESSAGE2 = AirbyteMessageUtils.createRecordMessage(STREAM_NAME, FIELD_NAME, "yellow");
+  private static final AirbyteMessage INVALID_RECORD_MESSAGE = AirbyteMessageUtils.createRecordMessage(INVALID_STREAM_NAME, FIELD_NAME, "yellow");
 
   private Path jobRoot;
   private Path normalizationRoot;
   private AirbyteSource tap;
-  private NamespacingMapper mapper;
   private AirbyteDestination target;
-  private StandardSyncInput syncInput;
+  private StandardSyncInput invalidSyncInput;
   private StandardTapConfig tapConfig;
   private StandardTargetConfig targetConfig;
-  private NormalizationRunner normalizationRunner;
 
   @SuppressWarnings("unchecked")
   @BeforeEach
@@ -82,72 +73,50 @@ class DefaultSyncWorkerTest {
     jobRoot = Files.createDirectories(Files.createTempDirectory("test").resolve(WORKSPACE_ROOT));
     normalizationRoot = jobRoot.resolve("normalize");
 
-    final ImmutablePair<StandardSync, StandardSyncInput> syncPair = TestConfigHelpers.createSyncConfig();
-    syncInput = syncPair.getValue();
+    final StandardSyncInput validSyncInput = TestConfigHelpers.createSyncConfig().getValue();
 
-    tapConfig = WorkerUtils.syncToTapConfig(syncInput);
-    targetConfig = WorkerUtils.syncToTargetConfig(syncInput);
+    // create sync input with invalid stream to ensure it is filtered out
+    invalidSyncInput = new StandardSyncInput();
+    invalidSyncInput.setConnectionId(validSyncInput.getConnectionId());
+    invalidSyncInput.setDestinationConnection(validSyncInput.getDestinationConnection());
+    invalidSyncInput.setSourceConnection(validSyncInput.getSourceConnection());
+    invalidSyncInput.setState(validSyncInput.getState());
+    invalidSyncInput.setSyncMode(validSyncInput.getSyncMode());
+
+    final ConfiguredAirbyteStream invalidStream = new ConfiguredAirbyteStream();
+    invalidStream.setName(INVALID_STREAM_NAME);
+    invalidStream.setJsonSchema(Jsons.deserialize("{}"));
+    final List<ConfiguredAirbyteStream> streams = new ArrayList<>(validSyncInput.getCatalog().getStreams());
+    streams.add(invalidStream);
+    final ConfiguredAirbyteCatalog catalog = new ConfiguredAirbyteCatalog();
+    catalog.setStreams(streams);
+    invalidSyncInput.setCatalog(catalog);
+
+    tapConfig = WorkerUtils.syncToTapConfig(validSyncInput);
+    targetConfig = WorkerUtils.syncToTargetConfig(validSyncInput);
 
     tap = mock(AirbyteSource.class);
-    mapper = mock(NamespacingMapper.class);
     target = mock(AirbyteDestination.class);
-    normalizationRunner = mock(NormalizationRunner.class);
 
-    when(tap.isFinished()).thenReturn(false, false, false, true);
-    when(tap.attemptRead()).thenReturn(Optional.of(RECORD_MESSAGE1), Optional.empty(), Optional.of(RECORD_MESSAGE2));
-    when(mapper.mapCatalog(targetConfig.getCatalog())).thenReturn(targetConfig.getCatalog());
-    when(mapper.mapMessage(RECORD_MESSAGE1)).thenReturn(RECORD_MESSAGE1);
-    when(mapper.mapMessage(RECORD_MESSAGE2)).thenReturn(RECORD_MESSAGE2);
-    when(normalizationRunner.normalize(JOB_ID, JOB_ATTEMPT, normalizationRoot, targetConfig.getDestinationConnectionConfiguration(),
-        targetConfig.getCatalog()))
-            .thenReturn(true);
+    when(tap.isFinished()).thenReturn(false, false, false, false, true);
+    when(tap.attemptRead()).thenReturn(Optional.of(RECORD_MESSAGE1), Optional.empty(), Optional.of(RECORD_MESSAGE2),
+        Optional.of(INVALID_RECORD_MESSAGE));
   }
 
   @Test
   void test() throws Exception {
     final DefaultSyncWorker defaultSyncWorker =
-        new DefaultSyncWorker(JOB_ID, JOB_ATTEMPT, tap, mapper, target, new AirbyteMessageTracker(), normalizationRunner);
+        new DefaultSyncWorker(tap, target, new AirbyteMessageTracker());
+    final OutputAndStatus<StandardSyncOutput> run = defaultSyncWorker.run(invalidSyncInput, jobRoot);
 
-    defaultSyncWorker.run(syncInput, jobRoot);
+    assertEquals(JobStatus.SUCCEEDED, run.getStatus());
 
     verify(tap).start(tapConfig, jobRoot);
     verify(target).start(targetConfig, jobRoot);
     verify(target).accept(RECORD_MESSAGE1);
     verify(target).accept(RECORD_MESSAGE2);
-    verify(normalizationRunner).start();
-    verify(normalizationRunner).normalize(JOB_ID, JOB_ATTEMPT, normalizationRoot, targetConfig.getDestinationConnectionConfiguration(),
-        targetConfig.getCatalog());
-    verify(normalizationRunner).close();
     verify(tap).close();
     verify(target).close();
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  void testPopulatesSyncSummary() throws WorkerException {
-    final MessageTracker<AirbyteMessage> messageTracker = mock(MessageTracker.class);
-    final JsonNode expectedState = Jsons.jsonNode(ImmutableMap.of("updated_at", 10L));
-    when(messageTracker.getRecordCount()).thenReturn(12L);
-    when(messageTracker.getBytesCount()).thenReturn(100L);
-    when(messageTracker.getOutputState()).thenReturn(Optional.of(expectedState));
-
-    final DefaultSyncWorker defaultSyncWorker = new DefaultSyncWorker(JOB_ID, JOB_ATTEMPT, tap, mapper, target, messageTracker, normalizationRunner);
-    final StandardSyncOutput actual = defaultSyncWorker.run(syncInput, jobRoot);
-    final StandardSyncOutput expectedSyncOutput = new StandardSyncOutput()
-        .withStandardSyncSummary(new StandardSyncSummary()
-            .withRecordsSynced(12L)
-            .withBytesSynced(100L)
-            .withStatus(Status.COMPLETED))
-        .withState(new State().withState(expectedState));
-
-    // good enough to verify that times are present.
-    assertNotNull(actual.getStandardSyncSummary().getStartTime());
-    assertNotNull(actual.getStandardSyncSummary().getEndTime());
-    // remove times so we can do the rest of the object <> object comparison.
-    actual.getStandardSyncSummary().withStartTime(null);
-    actual.getStandardSyncSummary().withEndTime(null);
-
-    assertEquals(expectedSyncOutput, actual);
   }
 
 }

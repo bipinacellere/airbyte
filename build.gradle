@@ -49,15 +49,8 @@ def createSpotlessTarget = { pattern ->
         '.venv',
         '*.egg-info',
         'build',
-        'dbt-project-template',
-        'tools',
-        'secrets'
+        'base-normalization'
     ]
-
-    if (System.getenv().containsKey("CORE_ONLY")) {
-        excludes.add("airbyte-integrations/connectors")
-    }
-
     return fileTree(dir: rootDir, include: pattern, exclude: excludes.collect {"**/${it}"})
 }
 
@@ -84,7 +77,7 @@ spotless {
     python {
         target createSpotlessTarget('**/*.py')
 
-        licenseHeaderFile createPythonLicenseWith(rootProject.file('LICENSE')), '(from|import|def|#)'
+        licenseHeaderFile createPythonLicenseWith(rootProject.file('LICENSE')), '(from|import|def|# generated)'
     }
     format 'styling', {
         target createSpotlessTarget(['**/*.yaml', '**/*.json'])
@@ -99,16 +92,15 @@ allprojects {
 
     afterEvaluate { project ->
         def composeDeps = [
-                ":airbyte-config:init",
-                ":airbyte-db",
-                ":airbyte-migration",
-                ":airbyte-scheduler:app",
-                ":airbyte-server",
-                ":airbyte-webapp",
+                "airbyte-config:init",
+                "airbyte-db",
+                "airbyte-scheduler",
+                "airbyte-server",
+                "airbyte-webapp",
         ].toSet().asImmutable()
 
-        if (project.getPath() in composeDeps) {
-            composeBuild.dependsOn(project.getPath() + ':assemble')
+        if (project.name in composeDeps) {
+            composeBuild.dependsOn(project.tasks.assemble)
         }
     }
 }
@@ -126,7 +118,7 @@ allprojects {
 // Java projects common configurations
 subprojects {
 
-    if (project.name == 'airbyte-webapp' || project.name == 'airbyte-e2e-testing') {
+    if (project.name == 'airbyte-webapp') {
         return
     }
 
@@ -199,27 +191,18 @@ subprojects {
 }
 
 task composeBuild {
-    def buildTag = System.getenv('VERSION') ?: 'dev'
     doFirst {
         exec {
             workingDir rootDir
             commandLine 'docker-compose', '-f', 'docker-compose.build.yaml', 'build', '--parallel', '--quiet'
-            environment 'VERSION', buildTag
         }
     }
 }
 build.dependsOn(composeBuild)
 
-task('generate') {
-    dependsOn subprojects.collect { it.getTasksByName('generateSeed', true) }
-    dependsOn subprojects.collect { it.getTasksByName('generateProtocolClassFiles', true) }
-    dependsOn subprojects.collect { it.getTasksByName('generateJsonSchema2Pojo', true) }
-}
-
 task('format') {
-    dependsOn generate
     dependsOn spotlessApply
-    dependsOn subprojects.collect { it.getTasksByName('airbytePythonFormat', true) }
+    dependsOn subprojects.collect { it.getTasksByName('blackFormat', true) }
 }
 
 // produce reproducible archives

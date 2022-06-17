@@ -24,22 +24,25 @@
 
 package io.airbyte.workers;
 
+import com.google.common.collect.Sets;
 import io.airbyte.config.StandardSyncInput;
 import io.airbyte.config.StandardSyncOutput;
 import io.airbyte.config.StandardSyncSummary;
-import io.airbyte.config.StandardSyncSummary.Status;
 import io.airbyte.config.StandardTapConfig;
 import io.airbyte.config.StandardTargetConfig;
 import io.airbyte.config.State;
 import io.airbyte.protocol.models.AirbyteMessage;
-import io.airbyte.workers.normalization.NormalizationRunner;
+import io.airbyte.protocol.models.CatalogHelpers;
+import io.airbyte.protocol.models.ConfiguredAirbyteCatalog;
+import io.airbyte.protocol.models.ConfiguredAirbyteStream;
 import io.airbyte.workers.protocols.Destination;
-import io.airbyte.workers.protocols.Mapper;
 import io.airbyte.workers.protocols.MessageTracker;
 import io.airbyte.workers.protocols.Source;
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -49,45 +52,31 @@ public class DefaultSyncWorker implements SyncWorker {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(DefaultSyncWorker.class);
 
-  private final String jobId;
-  private final int attempt;
   private final Source<AirbyteMessage> source;
-  private final Mapper<AirbyteMessage> mapper;
   private final Destination<AirbyteMessage> destination;
   private final MessageTracker<AirbyteMessage> messageTracker;
-  private final NormalizationRunner normalizationRunner;
 
   private final AtomicBoolean cancelled;
 
-  public DefaultSyncWorker(
-                           final String jobId,
-                           final int attempt,
-                           final Source<AirbyteMessage> source,
-                           final Mapper<AirbyteMessage> mapper,
+  public DefaultSyncWorker(final Source<AirbyteMessage> source,
                            final Destination<AirbyteMessage> destination,
-                           final MessageTracker<AirbyteMessage> messageTracker,
-                           final NormalizationRunner normalizationRunner) {
-    this.jobId = jobId;
-    this.attempt = attempt;
+                           final MessageTracker<AirbyteMessage> messageTracker) {
     this.source = source;
-    this.mapper = mapper;
     this.destination = destination;
     this.messageTracker = messageTracker;
-    this.normalizationRunner = normalizationRunner;
 
     this.cancelled = new AtomicBoolean(false);
   }
 
   @Override
-  public StandardSyncOutput run(StandardSyncInput syncInput, Path jobRoot) throws WorkerException {
+  public OutputAndStatus<StandardSyncOutput> run(StandardSyncInput syncInput, Path jobRoot) {
     long startTime = System.currentTimeMillis();
 
-    LOGGER.info("configured sync modes: {}", syncInput.getCatalog().getStreams()
-        .stream()
-        .collect(Collectors.toMap(s -> s.getStream().getName(), s -> String.format("%s - %s", s.getSyncMode(), s.getDestinationSyncMode()))));
+    // clean catalog object
+    removeInvalidStreams(syncInput.getCatalog());
+
     final StandardTapConfig tapConfig = WorkerUtils.syncToTapConfig(syncInput);
     final StandardTargetConfig targetConfig = WorkerUtils.syncToTargetConfig(syncInput);
-    targetConfig.setCatalog(mapper.mapCatalog(targetConfig.getCatalog()));
 
     try (destination; source) {
       destination.start(targetConfig, jobRoot);
@@ -96,76 +85,55 @@ public class DefaultSyncWorker implements SyncWorker {
       while (!cancelled.get() && !source.isFinished()) {
         final Optional<AirbyteMessage> maybeMessage = source.attemptRead();
         if (maybeMessage.isPresent()) {
-          final AirbyteMessage message = mapper.mapMessage(maybeMessage.get());
+          final AirbyteMessage message = maybeMessage.get();
 
-          messageTracker.accept(message);
-          destination.accept(message);
+          if (message.getType().equals(AirbyteMessage.Type.RECORD) && !CatalogHelpers.isValidIdentifier(message.getRecord().getStream())) {
+            LOGGER.error("Filtered out record for invalid stream: " + message.getRecord().getStream());
+          } else {
+            messageTracker.accept(message);
+            destination.accept(message);
+          }
         }
       }
 
+      destination.notifyEndOfStream();
     } catch (Exception e) {
-      throw new WorkerException("Sync worker failed.", e);
+      LOGGER.error("Sync worker failed.", e);
+
+      return new OutputAndStatus<>(JobStatus.FAILED, null);
     }
 
-    try (normalizationRunner) {
-      LOGGER.info("Running normalization.");
-      normalizationRunner.start();
-      final Path normalizationRoot = Files.createDirectories(jobRoot.resolve("normalize"));
-      if (!normalizationRunner.normalize(jobId, attempt, normalizationRoot, syncInput.getDestinationConfiguration(), targetConfig.getCatalog())) {
-        throw new WorkerException("Normalization Failed.");
-      }
-    } catch (Exception e) {
-      throw new WorkerException("Normalization Failed.", e);
-    }
-
-    final StandardSyncSummary summary = new StandardSyncSummary()
-        .withStatus(cancelled.get() ? Status.FAILED : Status.COMPLETED)
+    StandardSyncSummary summary = new StandardSyncSummary()
         .withRecordsSynced(messageTracker.getRecordCount())
-        .withBytesSynced(messageTracker.getBytesCount())
         .withStartTime(startTime)
         .withEndTime(System.currentTimeMillis());
-
-    LOGGER.info("sync summary: {}", summary);
-
-    if (cancelled.get()) {
-      throw new WorkerException("Sync was cancelled.");
-    }
 
     final StandardSyncOutput output = new StandardSyncOutput().withStandardSyncSummary(summary);
     messageTracker.getOutputState().ifPresent(capturedState -> {
       final State state = new State()
+          .withConnectionId(tapConfig.getConnectionId())
           .withState(capturedState);
       output.withState(state);
     });
 
-    return output;
+    return new OutputAndStatus<>(cancelled.get() ? JobStatus.FAILED : JobStatus.SUCCEEDED, output);
   }
 
   @Override
   public void cancel() {
-    LOGGER.info("Cancelling sync worker...");
     cancelled.set(true);
+  }
 
-    LOGGER.info("Cancelling source...");
-    try {
-      source.cancel();
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
+  private void removeInvalidStreams(ConfiguredAirbyteCatalog catalog) {
+    final Set<String> invalidStreams = Sets.union(
+        new HashSet<>(CatalogHelpers.getInvalidStreamNames(catalog)),
+        CatalogHelpers.getInvalidFieldNames(catalog).keySet());
 
-    LOGGER.info("Cancelling destination...");
-    try {
-      destination.cancel();
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
+    final List<ConfiguredAirbyteStream> streams = catalog.getStreams().stream()
+        .filter(stream -> !invalidStreams.contains(stream.getName()))
+        .collect(Collectors.toList());
 
-    LOGGER.info("Cancelling normalization runner...");
-    try {
-      normalizationRunner.close();
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
+    catalog.setStreams(streams);
   }
 
 }
