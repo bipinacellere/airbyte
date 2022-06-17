@@ -36,7 +36,6 @@ import io.airbyte.protocol.models.CatalogHelpers;
 import io.airbyte.protocol.models.ConfiguredAirbyteCatalog;
 import io.airbyte.protocol.models.ConfiguredAirbyteStream;
 import io.airbyte.protocol.models.ConnectorSpecification;
-import io.airbyte.protocol.models.DestinationSyncMode;
 import io.airbyte.protocol.models.Field;
 import io.airbyte.protocol.models.Field.JsonSchemaPrimitive;
 import io.airbyte.protocol.models.SyncMode;
@@ -50,6 +49,7 @@ public class MySqlStandardTest extends StandardSourceTest {
 
   private static final String STREAM_NAME = "id_and_name";
   private static final String STREAM_NAME2 = "public.starships";
+  private static final String STREAM_NAMESPACE = "tests";
 
   private MySQLContainer<?> container;
   private JsonNode config;
@@ -114,18 +114,16 @@ public class MySqlStandardTest extends StandardSourceTest {
         new ConfiguredAirbyteStream()
             .withSyncMode(SyncMode.INCREMENTAL)
             .withCursorField(Lists.newArrayList("id"))
-            .withDestinationSyncMode(DestinationSyncMode.APPEND)
             .withStream(CatalogHelpers.createAirbyteStream(
-                String.format("%s.%s", config.get("database").asText(), STREAM_NAME),
+                CatalogHelpers.createAirbyteStreamName(STREAM_NAMESPACE, String.format("%s.%s", config.get("database").asText(), STREAM_NAME)),
                 Field.of("id", JsonSchemaPrimitive.NUMBER),
                 Field.of("name", JsonSchemaPrimitive.STRING))
                 .withSupportedSyncModes(Lists.newArrayList(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL))),
         new ConfiguredAirbyteStream()
             .withSyncMode(SyncMode.INCREMENTAL)
             .withCursorField(Lists.newArrayList("id"))
-            .withDestinationSyncMode(DestinationSyncMode.APPEND)
             .withStream(CatalogHelpers.createAirbyteStream(
-                String.format("%s.%s", config.get("database").asText(), STREAM_NAME2),
+                CatalogHelpers.createAirbyteStreamName(STREAM_NAMESPACE, String.format("%s.%s", config.get("database").asText(), STREAM_NAME2)),
                 Field.of("id", JsonSchemaPrimitive.NUMBER),
                 Field.of("name", JsonSchemaPrimitive.STRING))
                 .withSupportedSyncModes(Lists.newArrayList(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL)))));

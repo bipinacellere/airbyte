@@ -39,7 +39,6 @@ import io.airbyte.protocol.models.Field;
 import io.airbyte.protocol.models.Field.JsonSchemaPrimitive;
 import io.airbyte.protocol.models.SyncMode;
 import java.sql.SQLException;
-import java.util.List;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -49,14 +48,17 @@ import org.testcontainers.containers.MSSQLServerContainer;
 
 class MssqlSourceTest {
 
-  private static final String STREAM_NAME = "dbo.id_and_name";
+  private static final String STREAM_NAMESPACE = "dbo";
+  private static final String TABLE_NAME = "id_and_name";
+  private static final String STREAM_NAME = STREAM_NAMESPACE + "." + TABLE_NAME;
   private static final AirbyteCatalog CATALOG = new AirbyteCatalog().withStreams(Lists.newArrayList(CatalogHelpers.createAirbyteStream(
-      STREAM_NAME,
+      CatalogHelpers.createAirbyteStreamName(STREAM_NAMESPACE, TABLE_NAME),
       Field.of("id", JsonSchemaPrimitive.NUMBER),
       Field.of("name", JsonSchemaPrimitive.STRING),
       Field.of("born", JsonSchemaPrimitive.STRING))
-      .withSupportedSyncModes(Lists.newArrayList(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL))
-      .withSourceDefinedPrimaryKey(List.of(List.of("id")))));
+      // TODO: Switch fully to StreamName instead of temporarily setName() for backward compatibility
+      .withName(STREAM_NAME)
+      .withSupportedSyncModes(Lists.newArrayList(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL))));
 
   private JsonNode configWithoutDbName;
   private JsonNode config;

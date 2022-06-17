@@ -65,10 +65,11 @@ class DefaultAirbyteSourceTest {
 
   private static final Path TEST_ROOT = Path.of("/tmp/airbyte_tests");
   private static final String STREAM_NAME = "user_preferences";
+  private static final String STREAM_NAMESPACE = "tests";
   private static final String FIELD_NAME = "favorite_color";
 
   private static final ConfiguredAirbyteCatalog CATALOG = CatalogHelpers.createConfiguredAirbyteCatalog(
-      "hudi:latest",
+      CatalogHelpers.createAirbyteStreamName(STREAM_NAMESPACE, "hudi:latest"),
       Field.of(FIELD_NAME, JsonSchemaPrimitive.STRING));
 
   private static final StandardTapConfig TAP_CONFIG = new StandardTapConfig()
@@ -76,7 +77,9 @@ class DefaultAirbyteSourceTest {
       .withSourceConnectionConfiguration(Jsons.jsonNode(Map.of(
           "apiKey", "123",
           "region", "us-east")))
-      .withCatalog(CatalogHelpers.createConfiguredAirbyteCatalog("hudi:latest", Field.of(FIELD_NAME, JsonSchemaPrimitive.STRING)));
+      .withCatalog(CatalogHelpers.createConfiguredAirbyteCatalog(
+          CatalogHelpers.createAirbyteStreamName(STREAM_NAMESPACE, "hudi:latest"),
+          Field.of(FIELD_NAME, JsonSchemaPrimitive.STRING)));
 
   private static final List<AirbyteMessage> MESSAGES = Lists.newArrayList(
       AirbyteMessageUtils.createRecordMessage(STREAM_NAME, FIELD_NAME, "blue"),
@@ -96,8 +99,8 @@ class DefaultAirbyteSourceTest {
     final InputStream inputStream = mock(InputStream.class);
     when(integrationLauncher.read(
         jobRoot,
-        WorkerConstants.SOURCE_CONFIG_JSON_FILENAME,
-        WorkerConstants.SOURCE_CATALOG_JSON_FILENAME,
+        WorkerConstants.TAP_CONFIG_JSON_FILENAME,
+        WorkerConstants.CATALOG_JSON_FILENAME,
         WorkerConstants.INPUT_STATE_JSON_FILENAME)
         .start()).thenReturn(process);
     when(process.isAlive()).thenReturn(true);
@@ -128,13 +131,13 @@ class DefaultAirbyteSourceTest {
 
     assertEquals(
         Jsons.jsonNode(TAP_CONFIG.getSourceConnectionConfiguration()),
-        Jsons.deserialize(IOs.readFile(jobRoot, WorkerConstants.SOURCE_CONFIG_JSON_FILENAME)));
+        Jsons.deserialize(IOs.readFile(jobRoot, WorkerConstants.TAP_CONFIG_JSON_FILENAME)));
     assertEquals(
         Jsons.jsonNode(TAP_CONFIG.getState().getState()),
         Jsons.deserialize(IOs.readFile(jobRoot, WorkerConstants.INPUT_STATE_JSON_FILENAME)));
     assertEquals(
         Jsons.jsonNode(CATALOG),
-        Jsons.deserialize(IOs.readFile(jobRoot, WorkerConstants.SOURCE_CATALOG_JSON_FILENAME)));
+        Jsons.deserialize(IOs.readFile(jobRoot, WorkerConstants.CATALOG_JSON_FILENAME)));
 
     assertEquals(MESSAGES, messages);
 

@@ -30,6 +30,7 @@ import io.airbyte.api.model.AirbyteCatalog;
 import io.airbyte.api.model.AirbyteStream;
 import io.airbyte.api.model.AirbyteStreamAndConfiguration;
 import io.airbyte.api.model.AirbyteStreamConfiguration;
+import io.airbyte.api.model.AirbyteStreamName;
 import io.airbyte.api.model.ConnectionRead;
 import io.airbyte.api.model.ConnectionSchedule;
 import io.airbyte.api.model.ConnectionStatus;
@@ -41,7 +42,6 @@ import io.airbyte.config.StandardSyncSchedule;
 import io.airbyte.protocol.models.CatalogHelpers;
 import io.airbyte.protocol.models.ConfiguredAirbyteCatalog;
 import io.airbyte.protocol.models.ConfiguredAirbyteStream;
-import io.airbyte.protocol.models.DestinationSyncMode;
 import io.airbyte.protocol.models.Field;
 import io.airbyte.protocol.models.Field.JsonSchemaPrimitive;
 import java.util.Collections;
@@ -51,6 +51,7 @@ import java.util.UUID;
 public class ConnectionHelpers {
 
   private static final String STREAM_NAME = "users-data";
+  private static final String STREAM_NAMESPACE = "tests";
   private static final String FIELD_NAME = "id";
 
   public static StandardSync generateSyncWithSourceId(UUID sourceId) {
@@ -59,7 +60,6 @@ public class ConnectionHelpers {
     return new StandardSync()
         .withConnectionId(connectionId)
         .withName("presto to hudi")
-        .withPrefix("presto_to_hudi")
         .withStatus(StandardSync.Status.ACTIVE)
         .withCatalog(generateBasicConfiguredAirbyteCatalog())
         .withSourceId(sourceId)
@@ -72,7 +72,6 @@ public class ConnectionHelpers {
     return new StandardSync()
         .withConnectionId(connectionId)
         .withName("presto to hudi")
-        .withPrefix("presto_to_hudi")
         .withStatus(StandardSync.Status.ACTIVE)
         .withCatalog(generateBasicConfiguredAirbyteCatalog())
         .withSourceId(UUID.randomUUID())
@@ -94,7 +93,6 @@ public class ConnectionHelpers {
         .sourceId(sourceId)
         .destinationId(destinationId)
         .name("presto to hudi")
-        .prefix("presto_to_hudi")
         .status(ConnectionStatus.ACTIVE)
         .schedule(generateBasicSchedule())
         .syncCatalog(ConnectionHelpers.generateBasicApiCatalog());
@@ -126,13 +124,14 @@ public class ConnectionHelpers {
     final ConfiguredAirbyteStream stream = new ConfiguredAirbyteStream()
         .withStream(generateBasicAirbyteStream())
         .withCursorField(Lists.newArrayList(FIELD_NAME))
-        .withSyncMode(io.airbyte.protocol.models.SyncMode.INCREMENTAL)
-        .withDestinationSyncMode(DestinationSyncMode.APPEND);
+        .withSyncMode(io.airbyte.protocol.models.SyncMode.INCREMENTAL);
     return new ConfiguredAirbyteCatalog().withStreams(Collections.singletonList(stream));
   }
 
   private static io.airbyte.protocol.models.AirbyteStream generateBasicAirbyteStream() {
-    return CatalogHelpers.createAirbyteStream(STREAM_NAME, Field.of(FIELD_NAME, JsonSchemaPrimitive.STRING))
+    return CatalogHelpers.createAirbyteStream(
+        CatalogHelpers.createAirbyteStreamName(STREAM_NAMESPACE, STREAM_NAME),
+        Field.of(FIELD_NAME, JsonSchemaPrimitive.STRING))
         .withDefaultCursorField(Lists.newArrayList(FIELD_NAME))
         .withSourceDefinedCursor(false)
         .withSupportedSyncModes(List.of(io.airbyte.protocol.models.SyncMode.FULL_REFRESH, io.airbyte.protocol.models.SyncMode.INCREMENTAL));
@@ -148,19 +147,23 @@ public class ConnectionHelpers {
     return new AirbyteStreamConfiguration()
         .syncMode(SyncMode.INCREMENTAL)
         .cursorField(Lists.newArrayList(FIELD_NAME))
-        .destinationSyncMode(io.airbyte.api.model.DestinationSyncMode.APPEND)
-        .primaryKey(Collections.emptyList())
         .aliasName(Names.toAlphanumericAndUnderscore(STREAM_NAME))
         .selected(true);
   }
 
   private static AirbyteStream generateBasicApiStream() {
     return new AirbyteStream()
+        .streamName(generateBasicApiStreamName())
+        // TODO: Switch fully to StreamName instead of temporarily setName() for backward compatibility
         .name(STREAM_NAME)
         .jsonSchema(generateBasicJsonSchema())
         .defaultCursorField(Lists.newArrayList(FIELD_NAME))
         .sourceDefinedCursor(false)
         .supportedSyncModes(List.of(SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL));
+  }
+
+  private static AirbyteStreamName generateBasicApiStreamName() {
+    return new AirbyteStreamName().namespace(STREAM_NAMESPACE).name(STREAM_NAME);
   }
 
 }
