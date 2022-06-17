@@ -2,30 +2,40 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
-    "id": {
+    "engagement_id": {
       "type": "integer"
     },
-    "portalId": {
-      "type": "integer"
-    },
-    "active": {
-      "type": "boolean"
-    },
-    "createdAt": {
-      "type": "integer"
-    },
-    "lastUpdated": {
-      "type": "integer"
-    },
-    "ownerId": {
-      "type": "integer"
-    },
-    "type": {
-      "type": "string"
-    },
-    "timestamp": {
-      "type": ["null", "string"],
-      "format": "date-time"
+    "engagement": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "portalId": {
+          "type": "integer"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": ["null", "string"],
+          "format": "date-time"
+        },
+        "lastUpdated": {
+          "type": ["null", "string"],
+          "format": "date-time"
+        },
+        "ownerId": {
+          "type": "integer"
+        },
+        "type": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": ["null", "string"],
+          "format": "date-time"
+        }
+      }
     },
     "associations": {
       "type": ["null", "object"],
